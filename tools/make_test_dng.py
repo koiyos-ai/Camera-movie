@@ -369,7 +369,8 @@ def main():
     # 参照プレビュー（カメラ処理済みを想定した sRGB 画像、HDR 風の柔らかいトーン）
     pv = scene * 1.0
     pv = pv / (pv + 0.55) * 1.55
-    pim = Image.fromarray((lin_to_srgb(pv) * 255 + 0.5).astype(np.uint8)).resize((1814, 1360), Image.LANCZOS)
+    pw_ = min(1814, W // 2)
+    pim = Image.fromarray((lin_to_srgb(pv) * 255 + 0.5).astype(np.uint8)).resize((pw_, pw_ * 3 // 4), Image.LANCZOS)
     pbuf = io.BytesIO()
     pim.save(pbuf, "JPEG", quality=90)
     preview = pbuf.getvalue()

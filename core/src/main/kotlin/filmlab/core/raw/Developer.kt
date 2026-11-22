@@ -231,64 +231,46 @@ class DevelopSession(val dng: DngFile, val raw: RawImage) {
         val pw = max(1, (outW / scale).roundToInt())
         val ph = max(1, (outH / scale).roundToInt())
 
-        // 1. 半分の解像度のスーパーピクセル（CFA）または 2x2 平均（LinearRaw）
+        // 1-2. 2x2 スーパーピクセル（CFA）/ 2x2 平均（LinearRaw）を k×k 個ずつ箱型平均して縮小。
+        //      半分解像度の中間配列は作らない（50MP でもメモリを圧迫しない）
         val hw = imgW / 2
         val hh = imgH / 2
-        val hr = FloatArray(hw * hh)
-        val hg = FloatArray(hw * hh)
-        val hb = FloatArray(hw * hh)
-        val cfa = raw.cfa
-        Parallel.forChunks(hh, 16) { s, e ->
-            for (j in s until e) for (i in 0 until hw) {
-                val x = i * 2
-                val y = j * 2
-                val k = j * hw + i
-                if (cfa != null) {
-                    val d = raw.data[0]
-                    var rr = 0f
-                    var gg = 0f
-                    var bb = 0f
-                    for (dy in 0..1) for (dx in 0..1) {
-                        val v = d[(y + dy) * imgW + x + dx]
-                        when (cfa.colorAt(x + dx, y + dy)) {
-                            0 -> rr = v
-                            1 -> gg += v * 0.5f
-                            else -> bb = v
-                        }
-                    }
-                    hr[k] = rr; hg[k] = gg; hb[k] = bb
-                } else {
-                    fun avg(p: FloatArray) = 0.25f * (p[y * imgW + x] + p[y * imgW + x + 1] + p[(y + 1) * imgW + x] + p[(y + 1) * imgW + x + 1])
-                    hr[k] = avg(raw.data[0]); hg[k] = avg(raw.data[1]); hb[k] = avg(raw.data[2])
-                }
-            }
-        }
-        // 2. 整数倍の箱型縮小（エイリアス防止）
         val k = max(1, floor(hw / (pw * 1.0)).toInt().coerceAtMost(floor(hh / (ph * 1.0)).toInt()))
         val dw = hw / k
         val dh = hh / k
-        val dr: FloatArray
-        val dg: FloatArray
-        val db: FloatArray
-        if (k == 1) {
-            dr = hr; dg = hg; db = hb
-        } else {
-            dr = FloatArray(dw * dh); dg = FloatArray(dw * dh); db = FloatArray(dw * dh)
-            val inv = 1f / (k * k)
-            Parallel.forChunks(dh, 8) { s, e ->
-                for (j in s until e) for (i in 0 until dw) {
-                    var a = 0f
-                    var b2 = 0f
-                    var c = 0f
-                    for (yy in 0 until k) {
-                        val row = (j * k + yy) * hw + i * k
-                        for (xx in 0 until k) {
-                            a += hr[row + xx]; b2 += hg[row + xx]; c += hb[row + xx]
+        val dr = FloatArray(dw * dh)
+        val dg = FloatArray(dw * dh)
+        val db = FloatArray(dw * dh)
+        val cfa = raw.cfa
+        val inv = 1f / (k * k)
+        Parallel.forChunks(dh, 8) { s, e ->
+            for (j in s until e) for (i in 0 until dw) {
+                var a = 0f
+                var b2 = 0f
+                var c = 0f
+                for (sj in 0 until k) for (si in 0 until k) {
+                    val x = (i * k + si) * 2
+                    val y = (j * k + sj) * 2
+                    if (cfa != null) {
+                        val d = raw.data[0]
+                        for (dy in 0..1) for (dx in 0..1) {
+                            val v = d[(y + dy) * imgW + x + dx]
+                            when (cfa.colorAt(x + dx, y + dy)) {
+                                0 -> a += v
+                                1 -> b2 += v * 0.5f
+                                else -> c += v
+                            }
                         }
+                    } else {
+                        val o00 = y * imgW + x
+                        val o10 = o00 + imgW
+                        a += 0.25f * (raw.data[0][o00] + raw.data[0][o00 + 1] + raw.data[0][o10] + raw.data[0][o10 + 1])
+                        b2 += 0.25f * (raw.data[1][o00] + raw.data[1][o00 + 1] + raw.data[1][o10] + raw.data[1][o10 + 1])
+                        c += 0.25f * (raw.data[2][o00] + raw.data[2][o00 + 1] + raw.data[2][o10] + raw.data[2][o10 + 1])
                     }
-                    val o = j * dw + i
-                    dr[o] = a * inv; dg[o] = b2 * inv; db[o] = c * inv
                 }
+                val o = j * dw + i
+                dr[o] = a * inv; dg[o] = b2 * inv; db[o] = c * inv
             }
         }
         // ステージ3座標 X → 縮小画像の座標: X = 2*(k*i + (k-1)/2) + 0.5
