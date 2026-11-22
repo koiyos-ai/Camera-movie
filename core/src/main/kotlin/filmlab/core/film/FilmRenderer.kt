@@ -189,7 +189,7 @@ class FilmRenderer(val stock: FilmStock, val params: DevelopParams, val imageW: 
                 for (i in 0 until w * rows) m[i] = (r[i] + g[i] + b[i]) * (1f / 3f)
             }
             val bl = FloatArray(w * rows)
-            Blur.separable(m, w, rows, Blur.gaussianKernel(adjSigma), bl)
+            Blur.fastGaussian(m, w, rows, adjSigma, bl)
             val a = adjAmount
             val start = outStart * w
             val end = (outStart + outRows) * w

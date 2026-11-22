@@ -97,6 +97,7 @@ fun main(args: Array<String>) {
                 FilmLab.exportJpeg(session, p, analysis, os)
             }
             println("フル解像度 ${session.outW}x${session.outH} → $out (%.2fs, %.1f MB)".format((System.nanoTime() - tr) / 1e9, out.length() / 1e6))
+            println("  内訳: " + session.stageReport())
         }
     }
 }

@@ -47,6 +47,9 @@ class Demosaic(private val cfa: FloatArray, private val w: Int, private val h: I
 
     private fun color(x: Int, y: Int): Int = pat.colorAt(x and 1, y and 1)
 
+    /** 列の反射（|オフセット| <= 2 用の高速版） */
+    private fun mx(x: Int): Int = if (x < 0) -x else if (x >= w) 2 * (w - 1) - x else x
+
     private fun rowHasRed(y: Int): Boolean {
         val p = y and 1
         return pat.colors[p * 2] == 0 || pat.colors[p * 2 + 1] == 0
@@ -85,10 +88,10 @@ class Demosaic(private val cfa: FloatArray, private val w: Int, private val h: I
                         gh[k] = c[k]; gv[k] = c[k]
                         ch[k] = 0f; cv[k] = 0f
                     } else {
-                        val xm1 = mirror(x - 1, w)
-                        val xp1 = mirror(x + 1, w)
-                        val xm2 = mirror(x - 2, w)
-                        val xp2 = mirror(x + 2, w)
+                        val xm1 = mx(x - 1)
+                        val xp1 = mx(x + 1)
+                        val xm2 = mx(x - 2)
+                        val xp2 = mx(x + 2)
                         val ghv = 0.5f * (c[row + xm1] + c[row + xp1]) + 0.5f * c[k] - 0.25f * (c[row + xm2] + c[row + xp2])
                         val gvv = 0.5f * (c[im1 + x] + c[ip1 + x]) + 0.5f * c[k] - 0.25f * (c[im2 + x] + c[ip2 + x])
                         gh[k] = ghv; gv[k] = gvv
@@ -106,26 +109,43 @@ class Demosaic(private val cfa: FloatArray, private val w: Int, private val h: I
                 val ip2 = mirror(i + 2, wh) * w
                 for (x in 0 until w) {
                     val k = row + x
-                    dh[k] = abs(ch[k] - ch[row + mirror(x + 2, w)])
+                    dh[k] = abs(ch[k] - ch[row + mx(x + 2)])
                     dv[k] = abs(cv[k] - cv[ip2 + x])
                 }
             }
         }
 
-        // 4. 方向判定（Menon の分類カーネル。画像外は 0 扱い）
+        // 4. 方向判定（Menon の分類カーネル。画像外は 0 扱い）。G サイトは判定不要（G=CFA）
         Parallel.forChunks(wh, 16) { s, e ->
             for (i in s until e) {
+                val y = wa + i
                 val row = i * w
+                val inner = i >= 2 && i < wh - 2
                 for (x in 0 until w) {
                     val k = row + x
-                    val sh = 3f * dh[k] + 3f * at(dh, x - 2, i, wh) +
-                        at(dh, x, i + 2, wh) + at(dh, x - 2, i + 2, wh) +
-                        at(dh, x - 1, i + 1, wh) + at(dh, x - 1, i - 1, wh) +
-                        at(dh, x, i - 2, wh) + at(dh, x - 2, i - 2, wh)
-                    val sv = 3f * dv[k] + 3f * at(dv, x, i - 2, wh) +
-                        at(dv, x + 2, i, wh) + at(dv, x + 2, i - 2, wh) +
-                        at(dv, x + 1, i - 1, wh) + at(dv, x - 1, i - 1, wh) +
-                        at(dv, x - 2, i, wh) + at(dv, x - 2, i - 2, wh)
+                    if (color(x, y) == 1) {
+                        g[k] = c[k]; dir[k] = 1
+                        continue
+                    }
+                    val sh: Float
+                    val sv: Float
+                    if (inner && x >= 2 && x < w - 2) {
+                        val up1 = k - w
+                        val up2 = k - 2 * w
+                        val dn1 = k + w
+                        val dn2 = k + 2 * w
+                        sh = 3f * dh[k] + 3f * dh[k - 2] + dh[dn2] + dh[dn2 - 2] + dh[dn1 - 1] + dh[up1 - 1] + dh[up2] + dh[up2 - 2]
+                        sv = 3f * dv[k] + 3f * dv[up2] + dv[k + 2] + dv[up2 + 2] + dv[up1 + 1] + dv[up1 - 1] + dv[k - 2] + dv[up2 - 2]
+                    } else {
+                        sh = 3f * dh[k] + 3f * at(dh, x - 2, i, wh) +
+                            at(dh, x, i + 2, wh) + at(dh, x - 2, i + 2, wh) +
+                            at(dh, x - 1, i + 1, wh) + at(dh, x - 1, i - 1, wh) +
+                            at(dh, x, i - 2, wh) + at(dh, x - 2, i - 2, wh)
+                        sv = 3f * dv[k] + 3f * at(dv, x, i - 2, wh) +
+                            at(dv, x + 2, i, wh) + at(dv, x + 2, i - 2, wh) +
+                            at(dv, x + 1, i - 1, wh) + at(dv, x - 1, i - 1, wh) +
+                            at(dv, x - 2, i, wh) + at(dv, x - 2, i - 2, wh)
+                    }
                     if (sv >= sh) {
                         g[k] = gh[k]; dir[k] = 1
                     } else {
@@ -162,8 +182,8 @@ class Demosaic(private val cfa: FloatArray, private val w: Int, private val h: I
                 for (x in 0 until w) {
                     if (color(x, y) != 1) continue
                     val k = row + x
-                    val xm1 = row + mirror(x - 1, w)
-                    val xp1 = row + mirror(x + 1, w)
+                    val xm1 = row + mx(x - 1)
+                    val xp1 = row + mx(x + 1)
                     val gk = g[k]
                     val ghAvg = 0.5f * (g[xm1] + g[xp1])
                     val gvAvg = 0.5f * (g[im1 + x] + g[ip1 + x])
@@ -189,8 +209,8 @@ class Demosaic(private val cfa: FloatArray, private val w: Int, private val h: I
                     val col = color(x, y)
                     if (col == 1) continue
                     val k = row + x
-                    val xm1 = row + mirror(x - 1, w)
-                    val xp1 = row + mirror(x + 1, w)
+                    val xm1 = row + mx(x - 1)
+                    val xp1 = row + mx(x + 1)
                     val horiz = dir[k].toInt() == 1
                     if (col == 2) {
                         val d = if (horiz) 0.5f * ((r[xm1] - b[xm1]) + (r[xp1] - b[xp1]))

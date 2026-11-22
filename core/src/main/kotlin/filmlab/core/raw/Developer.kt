@@ -501,7 +501,16 @@ class DevelopSession(val dng: DngFile, val raw: RawImage) {
     // フル解像度描画（帯ごと）
     // ------------------------------------------------------------------
 
+    /** 直近のフル現像の段階別所要時間（ns）: デモザイク等, 色変換, 色NR, シャープ, フィルム, 出力 */
+    val stageNanos = LongArray(6)
+
+    fun stageReport(): String {
+        val names = arrayOf("デモザイク/レンズ補正", "色変換", "色ノイズ低減", "シャープ", "フィルム", "JPEG")
+        return names.indices.joinToString("  ") { "%s %.2fs".format(names[it], stageNanos[it] / 1e9) }
+    }
+
     fun renderFull(params: DevelopParams, analysis: Analysis, sink: RowSink, progress: ((Float) -> Unit)? = null) {
+        stageNanos.fill(0)
         val stock = FilmStock.byId(params.stockId)
         val renderer = FilmRenderer(stock, params, outW, outH, seed)
         val cs = colorSetup(params)
@@ -522,13 +531,25 @@ class DevelopSession(val dng: DngFile, val raw: RawImage) {
             val r = FloatArray(n)
             val g = FloatArray(n)
             val b = FloatArray(n)
+            var t = System.nanoTime()
+            fun lap(i: Int) {
+                val now = System.nanoTime()
+                stageNanos[i] += now - t
+                t = now
+            }
             sampleCamera(wy0, wy1, r, g, b, tmp, wx, wy)
+            lap(0)
             toWorking(r, g, b, n, cs, analysis.gain)
+            lap(1)
             Detail.chromaDenoise(r, g, b, w, rows, params.chromaNr)
+            lap(2)
             Detail.sharpen(r, g, b, w, rows, params.sharpen)
+            lap(3)
             val out = ByteArray((oy1 - oy0) * w * 3)
             renderer.render(r, g, b, w, rows, wy0, oy0 - wy0, oy1 - oy0, hal, out, 0)
+            lap(4)
             sink.writeRows(out, oy1 - oy0)
+            lap(5)
             progress?.invoke(oy1.toFloat() / outH)
             oy0 = oy1
         }

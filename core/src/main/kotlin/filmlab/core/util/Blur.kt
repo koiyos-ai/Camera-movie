@@ -51,14 +51,14 @@ object Blur {
             }
         }
         Parallel.forChunks(h, 16) { s, e ->
+            val idx = IntArray(kernel.size)
             for (y in s until e) {
                 val row = y * w
+                // 各タップの行オフセットは行ごとに 1 回だけ計算（端はクランプ）
+                for (i in kernel.indices) idx[i] = min(h - 1, max(0, y + i - r)) * w
                 for (x in 0 until w) {
                     var acc = 0f
-                    for (i in kernel.indices) {
-                        val yy = min(h - 1, max(0, y + i - r))
-                        acc += tmp[yy * w + x] * kernel[i]
-                    }
+                    for (i in kernel.indices) acc += tmp[idx[i] + x] * kernel[i]
                     dst[row + x] = acc
                 }
             }
