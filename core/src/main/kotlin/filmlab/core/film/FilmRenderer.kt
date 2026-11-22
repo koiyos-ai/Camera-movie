@@ -45,7 +45,17 @@ class HalationField(val map: FloatArray, val mw: Int, val mh: Int, imageW: Int, 
  *
  * imageW/imageH は「この解像度で描画するときの画像全体の大きさ」。粒子・隣接効果の半径はこれに比例。
  */
-class FilmRenderer(val stock: FilmStock, val params: DevelopParams, val imageW: Int, val imageH: Int, seed: Long) {
+class FilmRenderer(
+    val stock: FilmStock,
+    val params: DevelopParams,
+    val imageW: Int,
+    val imageH: Int,
+    seed: Long,
+    /** false: 隣接効果など近傍を参照する処理を行わない（LUT 生成用） */
+    spatial: Boolean = true,
+    /** false: 8bit 化のディザを行わない（LUT 生成用） */
+    private val dithering: Boolean = true,
+) {
     private val proc = stock.process
     private val longSide = max(imageW, imageH)
     private val mono = proc == FilmProcess.BW
@@ -132,7 +142,7 @@ class FilmRenderer(val stock: FilmStock, val params: DevelopParams, val imageW: 
     private val grainChroma = stock.grainChroma.toFloat().coerceIn(0f, 1f)
 
     // ---- 隣接効果 ----
-    private val adjAmount = stock.adjacency.toFloat()
+    private val adjAmount = if (spatial) stock.adjacency.toFloat() else 0f
     private val adjSigma = (stock.adjacencyRadius * longSide).toFloat()
 
     /** 帯の上下に必要な余白（行数）。隣接効果のぼかし半径 */
@@ -317,6 +327,7 @@ class FilmRenderer(val stock: FilmStock, val params: DevelopParams, val imageW: 
     }
 
     private fun dither(x: Int, y: Int): Float {
+        if (!dithering) return 0f
         var h = x * 0x27d4eb2d xor (y * 0x165667b1)
         h = (h xor (h ushr 15)) * 0x2c1b3c6d
         h = (h xor (h ushr 12)) * 0x297a2d39

@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- 純正 Pixel カメラが保存した RAW(DNG) を読むため -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <!-- 再起動後に自動現像の監視を再登録するため -->
@@ -44,6 +46,20 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/x-adobe-dng" />
                 <data android:mimeType="image/dng" />
+            </intent-filter>
+        </activity>
+
+        <!-- フィルムカメラ（リアルタイムプレビュー）。ホームに別アイコン「FilmCam」として出る -->
+        <activity
+            android:name="filmlab.app.CameraActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:exported="true"
+            android:label="FilmCam"
+            android:screenOrientation="portrait"
+            android:taskAffinity="dev.cameramovie.filmlab.camera">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 

@@ -203,7 +203,8 @@ class MainActivity : Activity() {
         }
 
         val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        top.addView(button("Pixel カメラで撮影") { launchCamera() })
+        top.addView(button("フィルムカメラ") { startActivity(Intent(this, CameraActivity::class.java)) })
+        top.addView(button("Pixel カメラ") { launchCamera() })
         autoSwitch = Switch(this).apply {
             text = "  自動現像"
             setTextColor(Color.WHITE)
