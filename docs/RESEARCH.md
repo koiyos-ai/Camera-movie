@@ -17,7 +17,7 @@
 
 | 要素 | 内容 | サードパーティから使えるか |
 |---|---|---|
-| センサー/レンズ | Pixel 10: 広角 48MP（1/2"、ビニングで 12MP 出力のみ）、超広角 13MP、5 倍望遠 10.8MP | Camera2 で可。ただし単写 |
+| センサー/レンズ | Pixel 10: 広角 48MP（Pixel 9 より小さいセンサー。ビニングした 12MP 出力のみ）、超広角 13MP、5 倍望遠 10.8MP | Camera2 で可。ただし単写 |
 | HDR+ | アンダー露出の RAW を 2〜15 枚撮り、位置合わせして合成した「計算 RAW」を作る | **不可**（純正カメラ内部の処理） |
 | Super Res Zoom / Night Sight など | 多フレームの超解像・夜景合成 | 一部の夜景モードを Camera Extensions 経由で使えるだけ（処理済み YUV/JPEG のみで RAW は出ない） |
 | 色・トーン（Real Tone、ローカルトーンマップ） | 処理済み JPEG に適用 | 不可（必要ない：フィルムのモデルで置き換える） |
@@ -33,7 +33,7 @@
 | # | 障壁 | 詳細 | 対応（実装箇所） |
 |---|---|---|---|
 | 1 | HDR+ は純正カメラ専用 | 上記のとおり | 純正カメラで RAW+JPEG 撮影 → その DNG を現像（`app/…/MainActivity.kt`） |
-| 2 | Pixel 10 の DNG はロスレス JPEG（LJ92）のタイル圧縮 | darktable / RawTherapee で埋め込みプレビューしか表示されない、Lightroom で JPEG 扱いになる、という報告がある | LJ92 デコーダを自前実装（1/2 成分・任意のタイル形状・予測子 1〜7・リスタート対応）。非圧縮版と完全一致することをテストで確認（`core/…/dng/LosslessJpeg.kt`） |
+| 2 | Pixel 10 系の DNG はロスレス JPEG（LJ92）圧縮（Pixel 10 Pro での報告） | darktable / RawTherapee で埋め込みプレビューしか表示されない、Lightroom で JPEG 扱いになる、という報告がある | LJ92 デコーダを自前実装（1/2 成分・任意のタイル形状・予測子 1〜7・リスタート対応）。非圧縮版と完全一致することをテストで確認（`core/…/dng/LosslessJpeg.kt`） |
 | 3 | レンズ補正が「命令」として DNG に入っている | 周辺減光・色シェーディングは OpcodeList2 の **GainMap**（ベイヤー各色ごとに 4 枚）、歪曲と倍率色収差は OpcodeList3 の **WarpRectilinear**。対応していない現像ソフトが多く、四隅が暗く色かぶりして歪みも残る | dng_sdk と同じ式で GainMap・WarpRectilinear・FixVignetteRadial・不良画素リストなどを実装（`dng/Opcodes.kt`, `raw/Warp.kt`） |
 | 4 | 歪曲補正が画像の外を参照する場合がある | 端の画素が引き伸ばされて縞になる | 補正後に外を参照する縁を自動で切り詰める（`Developer.computeCrop`） |
 | 5 | DNG は露出アンダーで、トーンも未調整 | HDR+ はハイライトを守るため暗めに合成する。そのまま現像すると暗い | 埋め込みプレビュー（HDR+ 処理済み）の輝度の中央値に合わせる自動露出。フィルムの特性曲線を逆算して露出を決める（`Developer.analyze`） |
