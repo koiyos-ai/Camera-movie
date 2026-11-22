@@ -7,6 +7,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.database.ContentObserver
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
@@ -78,11 +79,33 @@ class MainActivity : Activity() {
         handleIntent(intent)
     }
 
+    /** 純正カメラは HDR+ 処理の後で DNG を保存するので、写真ライブラリの変更を監視して一覧を更新する */
+    private val refreshRunnable = Runnable { refreshList() }
+    private val mediaObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            ui.removeCallbacks(refreshRunnable)
+            ui.postDelayed(refreshRunnable, 1200)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
+        try {
+            contentResolver.registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, mediaObserver)
+        } catch (_: Exception) {
+        }
         refreshList()
         val msg = Prefs.lastMessage(this)
         if (msg.isNotEmpty() && loaded == null) setStatus(msg)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try {
+            contentResolver.unregisterContentObserver(mediaObserver)
+        } catch (_: Exception) {
+        }
+        ui.removeCallbacks(refreshRunnable)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -407,8 +430,8 @@ class MainActivity : Activity() {
                     setStatus("DNG が見つかりません。Pixel カメラで「RAW + JPEG」を有効にして撮影してください。")
                 } else {
                     val top = items[0]
-                    // 新しい撮影があれば自動でそれを開く（自動現像オフ時）
-                    if (current == null || (top.id != newestId && newestId != -1L && !Prefs.autoEnabled(this))) {
+                    // 新しい撮影があれば自動でそれを開く
+                    if (current == null || (top.id != newestId && newestId != -1L)) {
                         select(top)
                     }
                     newestId = top.id
